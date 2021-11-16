@@ -7,8 +7,6 @@
 
 system_state_t sys_state;
 
-__thread task_t *active_task;
-
 
 void runtime_init(void)
 {
@@ -39,7 +37,8 @@ void runtime_finalize(void)
     task_waitall();
 
     PRINT_DEBUG(1, "Terminating ... \t Total task count: %lu \n", sys_state.task_counter);
-    
+
+    delete_thread_pool();
     delete_queues();
 }
 
@@ -87,6 +86,10 @@ void submit_task(task_t *t)
 
 void task_waitall(void)
 {
+
+    while(get_queue_size()){;}
+    return;
+    /*
     active_task = get_task_to_execute();
 
     while(active_task != NULL){
@@ -102,5 +105,5 @@ void task_waitall(void)
 #endif
 
         active_task = get_task_to_execute();
-    }
+    }*/
 }

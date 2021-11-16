@@ -6,6 +6,13 @@
 
 tasks_queue_t *tqueue= NULL;
 
+pthread_t **thread_pool;
+
+sem_t full_queue;
+sem_t empty_queue;
+sem_t mutex;
+
+__thread task_t *active_task;
 
 void create_queues(void)
 {
@@ -15,21 +22,75 @@ void create_queues(void)
 void delete_queues(void)
 {
     free_tasks_queue(tqueue);
-}    
+}  
+
+void * worker_thread(void * p){
+    while(1){
+        active_task = get_task_to_execute();
+
+        task_return_value_t ret = exec_task(active_task);
+
+        if (ret == TASK_COMPLETED){
+            terminate_task(active_task);
+        }
+    #ifdef WITH_DEPENDENCIES
+        else{
+            active_task->status = WAITING;
+        }
+    #endif
+    }    
+}
 
 void create_thread_pool(void)
 {
-    return ;
+    thread_pool = malloc(THREAD_COUNT*sizeof(pthread_t*));
+
+    for(int i=0; i<THREAD_COUNT; i++){
+        thread_pool[i] = malloc(sizeof(pthread_t));
+        pthread_create(thread_pool[i], NULL,&worker_thread, NULL);
+    }
+
+    sem_init(&full_queue, 0, 0);
+    sem_init(&empty_queue, 0, QUEUE_SIZE);
+    sem_init(&mutex, 0, 1);
+}
+
+
+
+void delete_thread_pool(void)
+{
+    for(int i=0; i<THREAD_COUNT; i++){ 
+        pthread_cancel(*thread_pool[i]);
+    }
 }
 
 void dispatch_task(task_t *t)
 {
+    sem_wait(&empty_queue);
+    sem_wait(&mutex);
+
     enqueue_task(tqueue, t);
+    
+    sem_post(&mutex);
+    sem_post(&full_queue);
+    
+}
+
+int get_queue_size(){
+    return tqueue->index;
 }
 
 task_t* get_task_to_execute(void)
 {
-    return dequeue_task(tqueue);
+    sem_wait(&full_queue);
+    sem_wait(&mutex);
+
+    task_t* t = dequeue_task(tqueue);
+    
+    sem_post(&mutex);
+    sem_post(&empty_queue);
+
+    return t;
 }
 
 unsigned int exec_task(task_t *t)

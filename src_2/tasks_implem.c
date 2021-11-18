@@ -2,17 +2,15 @@
 
 #include "tasks_implem.h"
 #include "tasks_queue.h"
+#include "tasks.h"
 #include "debug.h"
 
 tasks_queue_t *tqueue= NULL;
 
 pthread_t **thread_pool;
 
-sem_t full_queue;
-sem_t empty_queue;
-sem_t mutex;
-
-__thread task_t *active_task;
+pthread_cond_t empty_queue;
+pthread_mutex_t mut_queue;
 
 int nb_exec;
 
@@ -31,7 +29,7 @@ void * worker_thread(void * p){
         active_task = get_task_to_execute();
 
         task_return_value_t ret = exec_task(active_task);
-
+        __atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
         if (ret == TASK_COMPLETED){
             terminate_task(active_task);
         }
@@ -52,9 +50,8 @@ void create_thread_pool(void)
         pthread_create(thread_pool[i], NULL,&worker_thread, NULL);
     }
     nb_exec = 0;
-    sem_init(&full_queue, 0, 0);
-    sem_init(&empty_queue, 0, QUEUE_SIZE);
-    sem_init(&mutex, 0, 1);
+    pthread_cond_init(&empty_queue,NULL);
+    pthread_mutex_init(&mut_queue,NULL);
     pthread_cond_init(&wait,NULL);
 }
 
@@ -75,26 +72,29 @@ int get_nb_exec(){
 
 void dispatch_task(task_t *t)
 {
-    sem_wait(&empty_queue);
-    sem_wait(&mutex);
-
+    pthread_mutex_lock(&mut_queue);
+    if(get_queue_size()==tqueue->task_buffer_size){
+        tqueue->task_buffer = realloc(tqueue->task_buffer, 2*tqueue->task_buffer_size*sizeof(task_t*));
+        tqueue->task_buffer_size*=2;
+        PRINT_DEBUG(100, "Resizing queue %u -> %u\n", tqueue->task_buffer_size/2, tqueue->task_buffer_size);
+    }
     enqueue_task(tqueue, t);
     
-    sem_post(&mutex);
-    sem_post(&full_queue);
-    
+    pthread_cond_signal(&empty_queue);
+    pthread_mutex_unlock(&mut_queue);
 }
 
 task_t* get_task_to_execute(void)
 {
-    sem_wait(&full_queue);
-    sem_wait(&mutex);
-
+    pthread_mutex_lock(&mut_queue);
+    
+    while(get_queue_size()<=0){
+        pthread_cond_wait(&empty_queue, &mut_queue);
+    }
     __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);
     task_t* t = dequeue_task(tqueue);
-    
-    sem_post(&mutex);
-    sem_post(&empty_queue);
+ 
+    pthread_mutex_unlock(&mut_queue);
 
     return t;
 }
@@ -107,7 +107,6 @@ unsigned int exec_task(task_t *t)
     PRINT_DEBUG(10, "Execution of task %u (step %u)\n", t->task_id, t->step);
     
     unsigned int result = t->fct(t, t->step);
-    
     return result;
 }
 
@@ -126,7 +125,7 @@ void terminate_task(task_t *t)
         task_check_runnable(waiting_task);
     }
 #endif
-    __atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
+    //__atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
     pthread_mutex_unlock(&mut_wait);
     pthread_cond_signal(&wait);
 }

@@ -6,7 +6,7 @@
 #include "utils.h"
 
 system_state_t sys_state;
-
+__thread task_t *active_task;
 
 void runtime_init(void)
 {
@@ -88,7 +88,7 @@ void task_waitall(void)
 {
     pthread_mutex_init(&mut_wait,NULL);
     while(get_queue_size() || get_nb_exec()){   
-        //printf("I'm waiting here!!!!\n"); fflush(stdout);     
+        PRINT_DEBUG(100,"Waiting with %d tasks in queue and %d tasks being executed!!!!\n",get_queue_size(), get_nb_exec());   
         pthread_cond_wait(&wait,&mut_wait);
     }
     return;

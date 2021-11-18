@@ -26,7 +26,6 @@ void free_tasks_queue(tasks_queue_t *q)
     /* free(q); */
 }
 
-
 void enqueue_task(tasks_queue_t *q, task_t *t)
 {
     if(q->index == q->task_buffer_size){

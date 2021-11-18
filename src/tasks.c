@@ -38,8 +38,8 @@ void runtime_finalize(void)
 
     PRINT_DEBUG(1, "Terminating ... \t Total task count: %lu \n", sys_state.task_counter);
 
-    delete_thread_pool();
     delete_queues();
+    delete_thread_pool();
 }
 
 
@@ -86,24 +86,10 @@ void submit_task(task_t *t)
 
 void task_waitall(void)
 {
-
-    while(get_queue_size()){;}
+    pthread_mutex_init(&mut_wait,NULL);
+    while(get_queue_size() || get_nb_exec()){   
+        //printf("I'm waiting here!!!!\n"); fflush(stdout);     
+        pthread_cond_wait(&wait,&mut_wait);
+    }
     return;
-    /*
-    active_task = get_task_to_execute();
-
-    while(active_task != NULL){
-        task_return_value_t ret = exec_task(active_task);
-
-        if (ret == TASK_COMPLETED){
-            terminate_task(active_task);
-        }
-#ifdef WITH_DEPENDENCIES
-        else{
-            active_task->status = WAITING;
-        }
-#endif
-
-        active_task = get_task_to_execute();
-    }*/
 }

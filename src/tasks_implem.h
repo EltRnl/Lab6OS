@@ -4,7 +4,12 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdlib.h>
+#include <stdatomic.h>
+#include <signal.h>
 #include "tasks_types.h"
+
+pthread_cond_t wait;
+pthread_mutex_t mut_wait;
 
 void create_queues(void);
 void delete_queues(void);
@@ -17,6 +22,7 @@ task_t* get_task_to_execute(void);
 unsigned int exec_task(task_t *t);
 void terminate_task(task_t *t);
 int get_queue_size(void);
+int get_nb_exec(void);
 
 void task_check_runnable(task_t *t);
 

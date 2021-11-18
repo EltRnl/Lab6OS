@@ -14,6 +14,8 @@ sem_t mutex;
 
 __thread task_t *active_task;
 
+int nb_exec;
+
 void create_queues(void)
 {
     tqueue = create_tasks_queue();
@@ -49,19 +51,26 @@ void create_thread_pool(void)
         thread_pool[i] = malloc(sizeof(pthread_t));
         pthread_create(thread_pool[i], NULL,&worker_thread, NULL);
     }
-
+    nb_exec = 0;
     sem_init(&full_queue, 0, 0);
     sem_init(&empty_queue, 0, QUEUE_SIZE);
     sem_init(&mutex, 0, 1);
+    pthread_cond_init(&wait,NULL);
 }
-
-
 
 void delete_thread_pool(void)
 {
     for(int i=0; i<THREAD_COUNT; i++){ 
-        pthread_cancel(*thread_pool[i]);
+        pthread_kill(*thread_pool[i],SIGTERM);
     }
+}
+
+int get_queue_size(){
+    return tqueue->index;
+}
+
+int get_nb_exec(){
+    return nb_exec;
 }
 
 void dispatch_task(task_t *t)
@@ -76,15 +85,12 @@ void dispatch_task(task_t *t)
     
 }
 
-int get_queue_size(){
-    return tqueue->index;
-}
-
 task_t* get_task_to_execute(void)
 {
     sem_wait(&full_queue);
     sem_wait(&mutex);
 
+    __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);
     task_t* t = dequeue_task(tqueue);
     
     sem_post(&mutex);
@@ -107,6 +113,7 @@ unsigned int exec_task(task_t *t)
 
 void terminate_task(task_t *t)
 {
+    pthread_mutex_lock(&mut_wait);
     t->status = TERMINATED;
     
     PRINT_DEBUG(10, "Task terminated: %u\n", t->task_id);
@@ -119,7 +126,9 @@ void terminate_task(task_t *t)
         task_check_runnable(waiting_task);
     }
 #endif
-
+    __atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
+    pthread_mutex_unlock(&mut_wait);
+    pthread_cond_signal(&wait);
 }
 
 void task_check_runnable(task_t *t)

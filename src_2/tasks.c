@@ -13,7 +13,7 @@ void runtime_init(void)
     /* a random number generator might be useful towards the end of
        the lab */
     rand_generator_init();
-
+    pthread_mutex_init(&mutex,NULL);
     create_queues();
     create_thread_pool();
 
@@ -36,7 +36,7 @@ void runtime_finalize(void)
 {
     task_waitall();
 
-    PRINT_DEBUG(1, "Terminating ... \t Total task count: %lu \n", sys_state.task_counter);
+    PRINT_DEBUG(0, "Terminating ... \t Total task count: %lu \n", sys_state.task_counter);
 
     delete_queues();
     delete_thread_pool();
@@ -58,6 +58,7 @@ task_t* create_task(task_routine_t f)
     t->tstate.output_from_dependencies_list = NULL;
     t->task_dependency_count = 0;
     t->parent_task = NULL;
+    pthread_mutex_init(&(t->children_lock),NULL);
 #endif
     
     t->status = INIT;
@@ -71,7 +72,7 @@ void submit_task(task_t *t)
 {
     t->status = READY;
 
-#ifdef WITH_DEPENDENCIES    
+#ifdef WITH_DEPENDENCIES 
     if(active_task != NULL){
         t->parent_task = active_task;
         active_task->task_dependency_count++;
@@ -86,10 +87,13 @@ void submit_task(task_t *t)
 
 void task_waitall(void)
 {
-    pthread_mutex_init(&mut_wait,NULL);
-    while(get_queue_size() || get_nb_exec()){   
-        PRINT_DEBUG(100,"Waiting with %d tasks in queue and %d tasks being executed!!!!\n",get_queue_size(), get_nb_exec());   
-        pthread_cond_wait(&wait,&mut_wait);
+    pthread_mutex_lock(&mutex);
+    int q,n;
+    while((q=get_queue_size()) || (n=get_nb_exec())){   
+        PRINT_DEBUG(100,"Waiting with %d tasks in queue and %d tasks being executed (entered with %d & %d).\n",get_queue_size(), get_nb_exec(),q,n); 
+        pthread_cond_wait(&wait,&mutex); 
     }
+    PRINT_DEBUG(100,"Finished waitall with %d tasks in queue and %d tasks being executed (%d & %d).\n",get_queue_size(), get_nb_exec(),q,n); 
+    pthread_mutex_unlock(&mutex);
     return;
 }

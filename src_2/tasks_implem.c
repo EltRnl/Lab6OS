@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #include "tasks_implem.h"
 #include "tasks_queue.h"
@@ -10,7 +11,7 @@ tasks_queue_t *tqueue= NULL;
 pthread_t **thread_pool;
 
 pthread_cond_t empty_queue;
-pthread_mutex_t mut_queue;
+
 
 int nb_exec;
 
@@ -29,15 +30,25 @@ void * worker_thread(void * p){
         active_task = get_task_to_execute();
 
         task_return_value_t ret = exec_task(active_task);
-        __atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
+        PRINT_DEBUG(100, "Task %u has finished step %d\n", active_task->task_id,active_task->step);
         if (ret == TASK_COMPLETED){
             terminate_task(active_task);
         }
     #ifdef WITH_DEPENDENCIES
         else{
+            PRINT_DEBUG(100, "Task %u is waiting for dependencies\n", active_task->task_id);
             active_task->status = WAITING;
+            
+            if(active_task->task_dependency_count>0 && active_task->task_dependency_done == active_task->task_dependency_count){
+                active_task->status = READY;
+                dispatch_task(active_task);
+            }
         }
     #endif
+        pthread_mutex_lock(&mutex);
+        __atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
+        pthread_mutex_unlock(&mutex);
+        pthread_cond_signal(&wait);
     }    
 }
 
@@ -51,7 +62,7 @@ void create_thread_pool(void)
     }
     nb_exec = 0;
     pthread_cond_init(&empty_queue,NULL);
-    pthread_mutex_init(&mut_queue,NULL);
+    pthread_mutex_init(&mutex,NULL);
     pthread_cond_init(&wait,NULL);
 }
 
@@ -72,29 +83,35 @@ int get_nb_exec(){
 
 void dispatch_task(task_t *t)
 {
-    pthread_mutex_lock(&mut_queue);
+    pthread_mutex_lock(&mutex);
     if(get_queue_size()==tqueue->task_buffer_size){
         tqueue->task_buffer = realloc(tqueue->task_buffer, 2*tqueue->task_buffer_size*sizeof(task_t*));
         tqueue->task_buffer_size*=2;
         PRINT_DEBUG(100, "Resizing queue %u -> %u\n", tqueue->task_buffer_size/2, tqueue->task_buffer_size);
     }
+    //printf("Task %d\n",t->task_id); fflush(stdout);
     enqueue_task(tqueue, t);
     
-    pthread_cond_signal(&empty_queue);
-    pthread_mutex_unlock(&mut_queue);
+    pthread_mutex_unlock(&mutex);
+    //pthread_cond_signal(&empty_queue); 
 }
 
 task_t* get_task_to_execute(void)
 {
-    pthread_mutex_lock(&mut_queue);
-    
+    pthread_mutex_lock(&mutex);
     while(get_queue_size()<=0){
-        pthread_cond_wait(&empty_queue, &mut_queue);
+        pthread_mutex_unlock(&mutex);
+        usleep(10);                     //TODO La technique du shlag! à changer plus tard
+        pthread_mutex_lock(&mutex);
+        /*
+        pthread_cond_wait(&empty_queue, &mutex); 
+        */
     }
-    __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);
     task_t* t = dequeue_task(tqueue);
+    PRINT_DEBUG(1,"Task Id: %d executing\n",t->task_id);
+    __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);
  
-    pthread_mutex_unlock(&mut_queue);
+    pthread_mutex_unlock(&mutex);
 
     return t;
 }
@@ -112,28 +129,26 @@ unsigned int exec_task(task_t *t)
 
 void terminate_task(task_t *t)
 {
-    pthread_mutex_lock(&mut_wait);
     t->status = TERMINATED;
-    
-    PRINT_DEBUG(10, "Task terminated: %u\n", t->task_id);
-
 #ifdef WITH_DEPENDENCIES
     if(t->parent_task != NULL){
         task_t *waiting_task = t->parent_task;
+        pthread_mutex_lock(&(waiting_task->children_lock));
         waiting_task->task_dependency_done++;
-        
+        pthread_mutex_unlock(&(waiting_task->children_lock));
         task_check_runnable(waiting_task);
+        
     }
 #endif
     //__atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
-    pthread_mutex_unlock(&mut_wait);
+    PRINT_DEBUG(1, "Task terminated: %u\n", t->task_id);
     pthread_cond_signal(&wait);
 }
 
 void task_check_runnable(task_t *t)
 {
 #ifdef WITH_DEPENDENCIES
-    if(t->task_dependency_done == t->task_dependency_count){
+    if(t->status == WAITING && t->task_dependency_done == t->task_dependency_count){
         t->status = READY;
         dispatch_task(t);
     }

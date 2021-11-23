@@ -9,7 +9,6 @@
 #include "tasks_types.h"
 
 pthread_cond_t wait;
-pthread_mutex_t mut_wait;
 
 void create_queues(void);
 void delete_queues(void);

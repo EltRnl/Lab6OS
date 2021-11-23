@@ -47,6 +47,7 @@ typedef struct task{
                                             dependencies */
     struct task *parent_task;      /* task that depends on this
                                       task */
+    pthread_mutex_t children_lock;
 #endif
 } task_t;
 

@@ -50,3 +50,13 @@ task_t* dequeue_task(tasks_queue_t *q)
     return t;
 }
 
+task_t* dequeue_first(tasks_queue_t *q)
+{
+    task_t *t = q->task_buffer[0];
+    for(int i=0; i<q->index;i++){
+        q->task_buffer[i]=q->task_buffer[i+1];
+    }
+    q->index--;
+    return t;
+}
+

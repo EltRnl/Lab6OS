@@ -13,7 +13,6 @@ pthread_t **thread_pool;
 pthread_cond_t empty_queue;
 
 __thread long thread_index;
-long queue_index;
 
 int nb_exec;
 
@@ -24,7 +23,6 @@ void create_queues(void)
         tqueue[i]=create_tasks_queue();
     }
     
-    queue_index = 0;
 }
 
 void delete_queues(void)
@@ -69,6 +67,7 @@ void create_thread_pool(void)
 {
     thread_pool = malloc(THREAD_COUNT*sizeof(pthread_t*));
     nb_exec = 0;
+    thread_index = 0;
     for(long i=0; i<THREAD_COUNT; i++){
         thread_pool[i] = malloc(sizeof(pthread_t));
         long k = i;
@@ -102,21 +101,32 @@ int get_nb_exec(){
 void dispatch_task(task_t *t)
 {
     pthread_mutex_lock(&mutex);
-    if(tqueue[queue_index]->index==tqueue[queue_index]->task_buffer_size){
-        tqueue[queue_index]->task_buffer = realloc(tqueue[queue_index]->task_buffer, 2*tqueue[queue_index]->task_buffer_size*sizeof(task_t*));
-        tqueue[queue_index]->task_buffer_size*=2;
-        PRINT_DEBUG(100, "Resizing queue #%ld : %u -> %u\n", queue_index,  tqueue[queue_index]->task_buffer_size/2, tqueue[queue_index]->task_buffer_size);
+    if(tqueue[thread_index]->index==tqueue[thread_index]->task_buffer_size){
+        tqueue[thread_index]->task_buffer = realloc(tqueue[thread_index]->task_buffer, 2*tqueue[thread_index]->task_buffer_size*sizeof(task_t*));
+        tqueue[thread_index]->task_buffer_size*=2;
+        PRINT_DEBUG(100, "Resizing queue #%ld : %u -> %u\n", thread_index,  tqueue[thread_index]->task_buffer_size/2, tqueue[thread_index]->task_buffer_size);
     }
-    enqueue_task(tqueue[queue_index], t);
-    queue_index = (queue_index + 1)%THREAD_COUNT;
+    enqueue_task(tqueue[thread_index], t);
+    thread_index = (thread_index + 1)%THREAD_COUNT;
     pthread_mutex_unlock(&mutex);
     //pthread_cond_signal(&empty_queue); 
+}
+
+task_t* steal_task(){
+    for (int i = (thread_index+1)%THREAD_COUNT; i !=thread_index; i=(i+1)%THREAD_COUNT){
+        if(tqueue[i]->index>0){
+            return dequeue_first(tqueue[i]);
+        }
+    }
+    return NULL;
 }
 
 task_t* get_task_to_execute(void)
 {
     pthread_mutex_lock(&mutex);
+    task_t* t = NULL;
     while(tqueue[thread_index]->index<=0){
+        if((t = steal_task())!=NULL) break;
         pthread_mutex_unlock(&mutex);
         usleep(10);                     //TODO La technique du shlag! à changer plus tard
         pthread_mutex_lock(&mutex);
@@ -124,7 +134,7 @@ task_t* get_task_to_execute(void)
         pthread_cond_wait(&empty_queue, &mutex); 
         */
     }    
-    task_t* t = dequeue_task(tqueue[thread_index]);
+    if(t==NULL) t = dequeue_task(tqueue[thread_index]);
     __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);
  
     pthread_mutex_unlock(&mutex);

@@ -16,5 +16,6 @@ void free_tasks_queue(tasks_queue_t *q);
 
 void enqueue_task(tasks_queue_t *q, task_t *t);
 task_t* dequeue_task(tasks_queue_t *q);
+task_t* dequeue_first(tasks_queue_t *q);
 
 #endif

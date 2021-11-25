@@ -22,7 +22,6 @@ unsigned int exec_task(task_t *t);
 void terminate_task(task_t *t);
 unsigned int get_all_queue_sizes(void);
 int get_nb_exec(void);
-
 void task_check_runnable(task_t *t);
 
 #endif

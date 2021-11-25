@@ -20,7 +20,7 @@ void dispatch_task(task_t *t);
 task_t* get_task_to_execute(void);
 unsigned int exec_task(task_t *t);
 void terminate_task(task_t *t);
-int get_queue_size(void);
+unsigned int get_all_queue_sizes(void);
 int get_nb_exec(void);
 
 void task_check_runnable(task_t *t);

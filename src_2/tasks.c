@@ -36,18 +36,19 @@ void runtime_finalize(void)
 {
     task_waitall();
 
-    PRINT_DEBUG(0, "Terminating ... \t Total task count: %lu \n", sys_state.task_counter);
+    PRINT_DEBUG(1, "Terminating ... \t Total task count: %lu \n", sys_state.task_counter);
 
-    delete_queues();
-    delete_thread_pool();
+    delete_queues(); 
+    delete_thread_pool(); 
 }
 
 
 task_t* create_task(task_routine_t f)
 {
     task_t *t = malloc(sizeof(task_t));
-
+    pthread_mutex_lock(&mutex);
     t->task_id = ++sys_state.task_counter;    
+    pthread_mutex_unlock(&mutex);
     t->fct = f;
     t->step = 0;
 

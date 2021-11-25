@@ -36,13 +36,14 @@ void * worker_thread(void * p){
         }
     #ifdef WITH_DEPENDENCIES
         else{
-            PRINT_DEBUG(100, "Task %u is waiting for dependencies\n", active_task->task_id);
+            PRINT_DEBUG(100, "Task %u is waiting for dependencies\n", active_task->task_id);            
+            pthread_mutex_lock(&(active_task->children_lock));
             active_task->status = WAITING;
-            
-            if(active_task->task_dependency_count>0 && active_task->task_dependency_done == active_task->task_dependency_count){
+            if(active_task->task_dependency_done == active_task->task_dependency_count){
                 active_task->status = READY;
                 dispatch_task(active_task);
             }
+            pthread_mutex_unlock(&(active_task->children_lock));
         }
     #endif
         pthread_mutex_lock(&mutex);
@@ -68,8 +69,8 @@ void create_thread_pool(void)
 
 void delete_thread_pool(void)
 {
-    for(int i=0; i<THREAD_COUNT; i++){ 
-        pthread_kill(*thread_pool[i],SIGTERM);
+    for(int i=0; i<THREAD_COUNT; i++){  
+        pthread_cancel(*thread_pool[i]);
     }
 }
 
@@ -89,7 +90,6 @@ void dispatch_task(task_t *t)
         tqueue->task_buffer_size*=2;
         PRINT_DEBUG(100, "Resizing queue %u -> %u\n", tqueue->task_buffer_size/2, tqueue->task_buffer_size);
     }
-    //printf("Task %d\n",t->task_id); fflush(stdout);
     enqueue_task(tqueue, t);
     
     pthread_mutex_unlock(&mutex);
@@ -100,6 +100,7 @@ task_t* get_task_to_execute(void)
 {
     pthread_mutex_lock(&mutex);
     while(get_queue_size()<=0){
+        
         pthread_mutex_unlock(&mutex);
         usleep(10);                     //TODO La technique du shlag! à changer plus tard
         pthread_mutex_lock(&mutex);
@@ -108,7 +109,6 @@ task_t* get_task_to_execute(void)
         */
     }
     task_t* t = dequeue_task(tqueue);
-    PRINT_DEBUG(1,"Task Id: %d executing\n",t->task_id);
     __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);
  
     pthread_mutex_unlock(&mutex);
@@ -135,13 +135,12 @@ void terminate_task(task_t *t)
         task_t *waiting_task = t->parent_task;
         pthread_mutex_lock(&(waiting_task->children_lock));
         waiting_task->task_dependency_done++;
-        pthread_mutex_unlock(&(waiting_task->children_lock));
         task_check_runnable(waiting_task);
-        
+        pthread_mutex_unlock(&(waiting_task->children_lock));        
     }
 #endif
     //__atomic_fetch_sub(&nb_exec,1,__ATOMIC_SEQ_CST);
-    PRINT_DEBUG(1, "Task terminated: %u\n", t->task_id);
+    PRINT_DEBUG(10, "Termination of task %u (step %u)\n", t->task_id, t->step);
     pthread_cond_signal(&wait);
 }
 

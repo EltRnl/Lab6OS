@@ -128,7 +128,7 @@ void dispatch_task(task_t *t)
     enqueue_task(tqueue[thread_index], t);
     thread_index = (thread_index + 1)%THREAD_COUNT;
     pthread_mutex_unlock(&mutex);
-    //pthread_cond_signal(&empty_queue); 
+    pthread_cond_broadcast(&empty_queue); 
 }
 
 task_t* steal_task(){
@@ -146,12 +146,7 @@ task_t* get_task_to_execute(void)
     task_t* t = NULL;
     while(get_queue_size(tqueue[thread_index])<=0){
         if((t = steal_task())!=NULL) break;
-        pthread_mutex_unlock(&mutex);
-        usleep(10);                     //TODO La technique du shlag! à changer plus tard
-        pthread_mutex_lock(&mutex);
-        /*
-        pthread_cond_wait(&empty_queue, &mutex); 
-        */
+        pthread_cond_wait(&empty_queue, &mutex);   
     }    
     if(t==NULL) t = dequeue_task(tqueue[thread_index]);
     __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);

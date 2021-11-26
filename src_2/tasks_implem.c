@@ -93,20 +93,14 @@ void dispatch_task(task_t *t)
     enqueue_task(tqueue, t);
     
     pthread_mutex_unlock(&mutex);
-    //pthread_cond_signal(&empty_queue); 
+    pthread_cond_broadcast(&empty_queue); 
 }
 
 task_t* get_task_to_execute(void)
 {
     pthread_mutex_lock(&mutex);
     while(get_queue_size()<=0){
-        
-        pthread_mutex_unlock(&mutex);
-        usleep(10);                     //TODO La technique du shlag! à changer plus tard
-        pthread_mutex_lock(&mutex);
-        /*
         pthread_cond_wait(&empty_queue, &mutex); 
-        */
     }
     task_t* t = dequeue_task(tqueue);
     __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);

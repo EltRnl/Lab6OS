@@ -75,7 +75,6 @@ void create_thread_pool(void)
         pthread_create(thread_pool[i], NULL,&worker_thread, (void *)k);
     }
     
-    pthread_cond_init(&empty_queue,NULL);
     pthread_mutex_init(&mutex,NULL);
     pthread_cond_init(&wait,NULL);
 }
@@ -108,21 +107,17 @@ void dispatch_task(task_t *t)
         PRINT_DEBUG(100, "Resizing queue #%ld : %u -> %u\n", queue_index,  tqueue[queue_index]->task_buffer_size/2, tqueue[queue_index]->task_buffer_size);
     }
     enqueue_task(tqueue[queue_index], t);
+    int tmp = queue_index;
     queue_index = (queue_index + 1)%THREAD_COUNT;
     pthread_mutex_unlock(&mutex);
-    //pthread_cond_signal(&empty_queue); 
+    pthread_cond_broadcast(&(tqueue[tmp]->empty_queue)); 
 }
 
 task_t* get_task_to_execute(void)
 {
     pthread_mutex_lock(&mutex);
     while(tqueue[thread_index]->index<=0){
-        pthread_mutex_unlock(&mutex);
-        usleep(10);                     //TODO La technique du shlag! à changer plus tard
-        pthread_mutex_lock(&mutex);
-        /*
-        pthread_cond_wait(&empty_queue, &mutex); 
-        */
+        pthread_cond_wait(&(tqueue[thread_index]->empty_queue), &mutex); 
     }    
     task_t* t = dequeue_task(tqueue[thread_index]);
     __atomic_fetch_add(&nb_exec,1,__ATOMIC_SEQ_CST);

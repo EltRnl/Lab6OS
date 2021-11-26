@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 #include "tasks_queue.h"
 
@@ -12,6 +13,8 @@ tasks_queue_t* create_tasks_queue(void)
     q->task_buffer = (task_t**) malloc(sizeof(task_t*) * q->task_buffer_size);
 
     q->index = 0;
+
+    pthread_cond_init(&(q->empty_queue),NULL);
 
     return q;
 }

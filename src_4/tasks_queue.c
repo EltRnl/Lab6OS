@@ -12,6 +12,7 @@ tasks_queue_t* create_tasks_queue(void)
     q->task_buffer = (task_t**) malloc(sizeof(task_t*) * q->task_buffer_size);
 
     q->index = 0;
+    q->start = 0;
 
     return q;
 }
@@ -52,11 +53,8 @@ task_t* dequeue_task(tasks_queue_t *q)
 
 task_t* dequeue_first(tasks_queue_t *q)
 {
-    task_t *t = q->task_buffer[0];
-    for(int i=0; i<q->index;i++){
-        q->task_buffer[i]=q->task_buffer[i+1]; //TODO Optimize by changing struct itself (double end queue)
-    }
-    q->index--;
+    task_t *t = q->task_buffer[q->start];
+    q->start++;
     return t;
 }
 

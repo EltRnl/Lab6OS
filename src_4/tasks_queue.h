@@ -8,23 +8,8 @@ typedef struct tasks_queue{
     task_t** task_buffer;
     unsigned int task_buffer_size;
     unsigned int index;
+    unsigned int start;
 } tasks_queue_t;
-
-/* TODO Idea for the new tasks_queue structure
-
-typedef struct tasks_list{
-    task_t elem;
-    struct tasks_list * prev;
-    struct tasks_list * next;
-} tasks_list_t
-
-typedef struct tasks_queue{
-    tasks_list_t* head;
-    tasks_list_t* tail; 
-    unsigned int size;
-} tasks_queue_t;
-
-*/
 
 tasks_queue_t* create_tasks_queue(void);
 void free_tasks_queue(tasks_queue_t *q);

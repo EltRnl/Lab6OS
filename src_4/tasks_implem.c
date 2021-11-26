@@ -86,25 +86,44 @@ void delete_thread_pool(void)
     }
 }
 
+int get_nb_exec(){
+    return nb_exec;
+}
+
+int get_queue_size(tasks_queue_t *q){
+    return q->index - q->start;
+}
+
 unsigned int get_all_queue_sizes(){
     unsigned int sum=0;
     for(int i=0;i<THREAD_COUNT;i++){
-        sum+=tqueue[i]->index;
+        sum+=get_queue_size(tqueue[i]);
     }
     return sum;
 }
 
-int get_nb_exec(){
-    return nb_exec;
+void resize_queue(tasks_queue_t *q){
+    if(q->start>0){
+        PRINT_DEBUG(100, "Giving back the stolen space to queue #%ld\n", thread_index);
+        unsigned int delta = q->start;
+        q->start = 0;
+        q->index -= delta;
+        for(int i=0; i<q->index;i++){
+            q->task_buffer[i]=q->task_buffer[i+delta]; 
+        }
+    }
+    if(q->index>0.8*q->task_buffer_size){
+        PRINT_DEBUG(100, "Resizing queue #%ld : %u -> %u\n", thread_index,  tqueue[thread_index]->task_buffer_size, tqueue[thread_index]->task_buffer_size*2);
+        q->task_buffer = realloc(q->task_buffer, 2*q->task_buffer_size*sizeof(task_t*));
+        q->task_buffer_size*=2;
+    }    
 }
 
 void dispatch_task(task_t *t)
 {
     pthread_mutex_lock(&mutex);
     if(tqueue[thread_index]->index==tqueue[thread_index]->task_buffer_size){
-        tqueue[thread_index]->task_buffer = realloc(tqueue[thread_index]->task_buffer, 2*tqueue[thread_index]->task_buffer_size*sizeof(task_t*));
-        tqueue[thread_index]->task_buffer_size*=2;
-        PRINT_DEBUG(100, "Resizing queue #%ld : %u -> %u\n", thread_index,  tqueue[thread_index]->task_buffer_size/2, tqueue[thread_index]->task_buffer_size);
+        resize_queue(tqueue[thread_index]);
     }
     enqueue_task(tqueue[thread_index], t);
     thread_index = (thread_index + 1)%THREAD_COUNT;
@@ -114,7 +133,7 @@ void dispatch_task(task_t *t)
 
 task_t* steal_task(){
     for (int i = (thread_index+1)%THREAD_COUNT; i !=thread_index; i=(i+1)%THREAD_COUNT){
-        if(tqueue[i]->index>0){
+        if(get_queue_size(tqueue[i])>0){  
             return dequeue_first(tqueue[i]);
         }
     }
@@ -125,7 +144,7 @@ task_t* get_task_to_execute(void)
 {
     pthread_mutex_lock(&mutex);
     task_t* t = NULL;
-    while(tqueue[thread_index]->index<=0){
+    while(get_queue_size(tqueue[thread_index])<=0){
         if((t = steal_task())!=NULL) break;
         pthread_mutex_unlock(&mutex);
         usleep(10);                     //TODO La technique du shlag! à changer plus tard

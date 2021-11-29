@@ -112,7 +112,7 @@ void resize_queue(tasks_queue_t *q){
             q->task_buffer[i]=q->task_buffer[i+delta]; 
         }
     }
-    if(q->index>0.8*q->task_buffer_size){
+    if((float)q->index>0.9*((float)q->task_buffer_size)){
         PRINT_DEBUG(100, "Resizing queue #%ld : %u -> %u\n", thread_index,  tqueue[thread_index]->task_buffer_size, tqueue[thread_index]->task_buffer_size*2);
         q->task_buffer = realloc(q->task_buffer, 2*q->task_buffer_size*sizeof(task_t*));
         q->task_buffer_size*=2;
